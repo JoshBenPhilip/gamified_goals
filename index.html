@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Life Quest</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Turn your habits into XP, HP and levels. You set every number.">
+<meta name="theme-color" content="#16141d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Life Quest">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Rubik:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-thumb game HUD. Sticky stat bars on top, content in the middle, tab bar at the bottom. Single dark look by choice. */
+:root {
+  --bg: #16141d;
+  --panel: #211e2b;
+  --panel-2: #2b2738;
+  --line: #3a3549;
+  --fg: #ece9f3;
+  --muted: #9a94ab;
+  --hp: #e5484d;
+  --hp-deep: #7a1f2a;
+  --xp: #f2b33d;
+  --xp-deep: #6b4a12;
+  --lvl: #7c6cf0;
+  --good: #46c48a;
+  --font-display: "Pixelify Sans", "Courier New", ui-monospace, monospace;
+  --font-body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r: 10px;
+  color-scheme: dark;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--bg); }
+body {
+  margin: 0;
+  color: var(--fg);
+  font: 15px/1.45 var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  z-index: 10; background: var(--bg);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--lvl); outline-offset: 2px; }
+.wrap {
+  max-width: 560px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- HUD ---------- */
+.hud {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.hud .wrap { padding-block: 14px 12px; display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.badge {
+  width: 64px; height: 64px; border-radius: 12px;
+  background: var(--lvl); color: #fff;
+  display: grid; place-items: center; text-align: center;
+  font-family: var(--font-display); line-height: 1;
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.25);
+}
+.badge small { display: block; font-size: 11px; letter-spacing: .12em; opacity: .85; }
+.badge b { display: block; font-size: 28px; font-weight: 700; margin-top: 2px; }
+.badge.pop { animation: pop .6s ease; }
+@keyframes pop { 0%{transform:scale(1)} 35%{transform:scale(1.18)} 100%{transform:scale(1)} }
+.bars { display: grid; gap: 8px; min-width: 0; }
+.bar-row { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: center; }
+.bar-row .ico { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+.bar-row.hp .ico { color: var(--hp); }
+.bar-row.xp .ico { color: var(--xp); }
+.bar {
+  position: relative; height: 20px; border-radius: 6px; overflow: hidden;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.bar .fill { position: absolute; inset: 0 auto 0 0; width: 0; transition: width .45s cubic-bezier(.2,.8,.2,1); }
+.hp .fill { background: linear-gradient(180deg, #ff6a6f, var(--hp)); }
+.xp .fill { background: linear-gradient(180deg, #ffcb62, var(--xp)); }
+.bar .num {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0,0,0,.7);
+}
+.hud.hit { animation: hit .4s ease; }
+@keyframes hit { 0%,100%{background:var(--bg)} 30%{background:var(--hp-deep)} }
+
+/* ---------- Sections ---------- */
+main .wrap { padding-block: 18px 8px; display: grid; gap: 22px; }
+.sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+h2 {
+  margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: .02em;
+  text-wrap: balance;
+}
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+
+/* Quick log pad */
+.pad { display: grid; gap: 8px; }
+.pad-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: stretch;
+  position: relative;
+}
+.pad-row .label {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-display); font-size: 14px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+}
+.pip { display: inline-flex; gap: 3px; }
+.pip i { width: 7px; height: 7px; border-radius: 2px; background: var(--line); }
+.pip i.on { background: var(--fg); }
+.act {
+  border: 0; border-radius: var(--r); min-height: 54px; padding: 8px 12px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.28);
+  transition: transform .06s ease, filter .15s ease;
+}
+.act:active { transform: translateY(2px); box-shadow: inset 0 -1px 0 rgba(0,0,0,.28); }
+.act.neg { background: var(--hp-deep); color: #ffd9da; }
+.act.pos { background: var(--xp-deep); color: #ffe7b8; }
+.act .sym { font-family: var(--font-display); font-size: 22px; line-height: 1; }
+
+/* Habits */
+.habits { display: grid; gap: 8px; }
+.habit {
+  display: grid; grid-template-columns: 52px 1fr 52px; align-items: stretch;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+}
+.habit .side {
+  border: 0; display: grid; place-items: center; font-family: var(--font-display); font-size: 24px;
+}
+.habit .side.neg { background: var(--hp-deep); color: #ffd9da; }
+.habit .side.pos { background: var(--xp-deep); color: #ffe7b8; }
+.habit .side:disabled { background: var(--panel-2); color: var(--line); cursor: default; }
+.habit .side:not(:disabled):active { filter: brightness(1.3); }
+.habit .body {
+  min-width: 0; padding: 10px 12px; background: none; border: 0; text-align: left;
+  display: grid; gap: 4px;
+}
+.habit .name { font-weight: 500; overflow-wrap: anywhere; }
+.habit .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip {
+  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--fg);
+}
+.btn {
+  border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px;
+  padding: 9px 14px; font-weight: 500; font-size: 14px;
+}
+.btn.primary { background: var(--lvl); border-color: var(--lvl); color: #fff; }
+.btn.danger { color: #ffb3b5; border-color: var(--hp-deep); }
+.btn.danger.armed { background: var(--hp); color: #fff; border-color: var(--hp); }
+.empty { padding: 18px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--r); }
+
+/* Rules form */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label, .table-head { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.field input, .cell input {
+  width: 100%; min-width: 0; padding: 10px 12px; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--line); font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.field input:focus, .cell input:focus { border-color: var(--lvl); outline: none; }
+.field .sub { font-size: 12px; color: var(--muted); }
+.table { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px 10px; align-items: center; }
+.table .rowlab { font-family: var(--font-display); font-size: 14px; letter-spacing: .06em; text-transform: uppercase; }
+.table-head.xp { color: var(--xp); }
+.table-head.hp { color: var(--hp); }
+.toggle { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
+.toggle input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--lvl); flex: none; }
+.toggle span small { display: block; color: var(--muted); font-size: 12px; }
+textarea {
+  width: 100%; min-height: 110px; padding: 10px; border-radius: 8px; resize: vertical;
+  background: var(--bg); border: 1px solid var(--line); font: 12px/1.4 ui-monospace, Menlo, monospace;
+}
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.saved { font-size: 12px; color: var(--good); opacity: 0; transition: opacity .2s; }
+.saved.show { opacity: 1; }
+
+/* Log */
+.log { display: grid; gap: 6px; }
+.entry {
+  display: grid; grid-template-columns: 4px 1fr auto; gap: 10px; align-items: center;
+  background: var(--panel); border-radius: 8px; padding: 8px 10px 8px 0; overflow: hidden;
+}
+.entry .stripe { align-self: stretch; }
+.entry.up .stripe { background: var(--xp); }
+.entry.down .stripe { background: var(--hp); }
+.entry .what { min-width: 0; overflow-wrap: anywhere; }
+.entry .what small { display: block; color: var(--muted); font-size: 12px; }
+.entry .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+.entry.up .amt { color: var(--xp); }
+.entry.down .amt { color: var(--hp); }
+.event { color: var(--lvl); font-weight: 600; }
+
+/* Tab bar */
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  background: var(--panel); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.tabs .wrap { display: grid; grid-template-columns: repeat(3, 1fr); }
+.tab {
+  background: none; border: 0; padding: 10px 4px 12px; display: grid; justify-items: center; gap: 2px;
+  color: var(--muted); font-size: 12px; font-weight: 500;
+}
+.tab svg { width: 22px; height: 22px; }
+.tab[aria-selected="true"] { color: var(--fg); }
+.tab[aria-selected="true"] svg { color: var(--lvl); }
+
+/* Sheet */
+.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(8,6,14,.6); display: grid; align-items: end; }
+.sheet {
+  background: var(--panel); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0;
+  padding-block: 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  max-height: 92vh; overflow-y: auto;
+}
+.sheet form { display: grid; gap: 14px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg label {
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 6px; text-align: center; cursor: pointer;
+  font-size: 14px; display: grid; gap: 2px;
+}
+.seg label small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg input:checked + label { border-color: var(--lvl); background: var(--panel-2); }
+.seg input:focus-visible + label { outline: 2px solid var(--lvl); }
+
+/* Floating numbers and toast */
+.float {
+  position: fixed; z-index: 30; pointer-events: none;
+  font-family: var(--font-display); font-weight: 700; font-size: 22px;
+  text-shadow: 0 2px 0 rgba(0,0,0,.5);
+  animation: rise 1s ease-out forwards;
+}
+.float.up { color: var(--xp); }
+.float.down { color: var(--hp); }
+@keyframes rise { from { transform: translate(-50%, 0); opacity: 1 } to { transform: translate(-50%, -56px); opacity: 0 } }
+.toast {
+  position: fixed; left: 50%; z-index: 25; transform: translateX(-50%);
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  background: var(--fg); color: var(--bg); border-radius: 10px; padding: 10px 14px;
+  display: flex; gap: 12px; align-items: center; max-width: calc(100% - 32px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); font-weight: 500; font-size: 14px;
+}
+.toast.big { background: var(--lvl); color: #fff; font-family: var(--font-display); font-size: 18px; }
+.toast.dead { background: var(--hp); color: #fff; }
+.toast button { background: none; border: 0; color: inherit; font-weight: 700; text-decoration: underline; padding: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="hud" id="hud">
+  <div class="wrap">
+    <div class="badge" id="badge" aria-label="Level"><div><small>LVL</small><b id="lvl">1</b></div></div>
+    <div class="bars">
+      <div class="bar-row hp">
+        <span class="ico">HP</span>
+        <div class="bar" role="meter" aria-label="Health" id="hpBar"><div class="fill" id="hpFill"></div><div class="num" id="hpNum"></div></div>
+      </div>
+      <div class="bar-row xp">
+        <span class="ico">XP</span>
+        <div class="bar" role="meter" aria-label="Experience" id="xpBar"><div class="fill" id="xpFill"></div><div class="num" id="xpNum"></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- PLAY -->
+  <div class="view" id="view-play">
+    <div class="wrap">
+      <section>
+        <div class="sec-head">
+          <h2>Quick log</h2>
+          <p class="hint">Tap − for damage, + for XP</p>
+        </div>
+        <div class="pad" id="pad"></div>
+      </section>
+
+      <section>
+        <div class="sec-head">
+          <h2>Habits</h2>
+          <button class="btn primary" id="addHabit" type="button">+ New habit</button>
+        </div>
+        <div class="habits" id="habits"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- RULES -->
+  <div class="view" id="view-rules" hidden>
+    <div class="wrap">
+      <section>
+        <div class="sec-head">
+          <h2>Character</h2>
+          <span class="saved" id="saved1">Saved</span>
+        </div>
+        <div class="card">
+          <div class="fields">
+            <div class="field">
+              <label for="f-hp">Current HP</label>
+              <input id="f-hp" type="number" inputmode="decimal" min="0" step="any">
+            </div>
+            <div class="field">
+              <label for="f-maxHp">Max HP</label>
+              <input id="f-maxHp" type="number" inputmode="decimal" min="1" step="any">
+            </div>
+            <div class="field">
+              <label for="f-xp">Current XP</label>
+              <input id="f-xp" type="number" inputmode="decimal" min="0" step="any">
+            </div>
+            <div class="field">
+              <label for="f-xpPerLevel">XP per level</label>
+              <input id="f-xpPerLevel" type="number" inputmode="decimal" min="1" step="any">
+              <span class="sub">Same every level until you change it</span>
+            </div>
+            <div class="field">
+              <label for="f-level">Level</label>
+              <input id="f-level" type="number" inputmode="numeric" min="1" step="1">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head">
+          <h2>Rewards &amp; damage</h2>
+          <span class="saved" id="saved2">Saved</span>
+        </div>
+        <div class="card">
+          <div class="table">
+            <span></span>
+            <span class="table-head xp">+ gives XP</span>
+            <span class="table-head hp">− takes HP</span>
+            <span class="rowlab">Easy</span>
+            <div class="cell"><input id="f-xp-easy" type="number" inputmode="decimal" min="0" step="any" aria-label="Easy XP"></div>
+            <div class="cell"><input id="f-dmg-easy" type="number" inputmode="decimal" min="0" step="any" aria-label="Easy damage"></div>
+            <span class="rowlab">Medium</span>
+            <div class="cell"><input id="f-xp-medium" type="number" inputmode="decimal" min="0" step="any" aria-label="Medium XP"></div>
+            <div class="cell"><input id="f-dmg-medium" type="number" inputmode="decimal" min="0" step="any" aria-label="Medium damage"></div>
+            <span class="rowlab">Hard</span>
+            <div class="cell"><input id="f-xp-hard" type="number" inputmode="decimal" min="0" step="any" aria-label="Hard XP"></div>
+            <div class="cell"><input id="f-dmg-hard" type="number" inputmode="decimal" min="0" step="any" aria-label="Hard damage"></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Game rules</h2></div>
+        <div class="card">
+          <label class="toggle"><input type="checkbox" id="f-refill">
+            <span>Refill HP on level up<small>Like Habitica: a new level heals you to full.</small></span></label>
+          <label class="toggle"><input type="checkbox" id="f-death">
+            <span>Lose a level when HP hits 0<small>XP resets to 0 and HP refills. Off: HP just refills.</small></span></label>
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Backup</h2></div>
+        <div class="card">
+          <p class="hint">Your progress is saved on this phone only. Copy this text somewhere safe to keep a backup, or paste a backup here and restore it.</p>
+          <textarea id="backup" spellcheck="false" aria-label="Backup data"></textarea>
+          <div class="row">
+            <button class="btn" type="button" id="copyBackup">Copy</button>
+            <button class="btn" type="button" id="restoreBackup">Restore from text</button>
+            <button class="btn danger" type="button" id="resetAll">Reset everything</button>
+          </div>
+          <p class="hint" id="backupMsg" aria-live="polite"></p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="view" id="view-log" hidden>
+    <div class="wrap">
+      <section>
+        <div class="sec-head">
+          <h2>Adventure log</h2>
+          <button class="btn" type="button" id="undoBtn">Undo last</button>
+        </div>
+        <div class="log" id="log"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="wrap" role="tablist">
+    <button class="tab" role="tab" data-view="play" aria-selected="true" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/></svg>
+      Play
+    </button>
+    <button class="tab" role="tab" data-view="rules" aria-selected="false" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      Rules
+    </button>
+    <button class="tab" role="tab" data-view="log" aria-selected="false" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6z"/><path d="M6 3v18"/><path d="M10 8h5M10 12h5M10 16h3"/></svg>
+      Log
+    </button>
+  </div>
+</nav>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="wrap">
+      <form id="habitForm" autocomplete="off">
+        <div class="sec-head" style="margin:0">
+          <h2 id="sheetTitle">New habit</h2>
+          <button class="btn" type="button" id="cancelHabit">Cancel</button>
+        </div>
+        <div class="field">
+          <label for="h-name">Name</label>
+          <input id="h-name" type="text" maxlength="80" required placeholder="e.g. Go to the gym">
+        </div>
+        <div class="field">
+          <span class="table-head">Difficulty</span>
+          <div class="seg" id="h-diff"></div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="h-up" checked><span>Show + button<small>Doing it gives XP</small></span></label>
+        <label class="toggle"><input type="checkbox" id="h-down" checked><span>Show − button<small>Slipping costs HP</small></span></label>
+        <div class="row">
+          <button class="btn primary" type="submit" id="saveHabit">Save habit</button>
+          <button class="btn danger" type="button" id="deleteHabit">Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden role="status" aria-live="polite"><span id="toastText"></span><button type="button" id="toastUndo">Undo</button></div>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "lifequest.v1";
+  var DIFFS = ["easy", "medium", "hard"];
+  var DIFF_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" };
+  var LOG_MAX = 150;
+
+  function defaults() {
+    return {
+      settings: {
+        maxHp: 50, xpPerLevel: 100,
+        xp: { easy: 5, medium: 10, hard: 20 },
+        dmg: { easy: 2, medium: 5, hard: 10 },
+        refillOnLevel: true, deathPenalty: true
+      },
+      stats: { hp: 50, xp: 0, level: 1 },
+      habits: [
+        { id: uid(), name: "Workout", diff: "hard", up: true, down: false, ups: 0, downs: 0 },
+        { id: uid(), name: "Read 20 pages", diff: "medium", up: true, down: false, ups: 0, downs: 0 },
+        { id: uid(), name: "Drink a glass of water", diff: "easy", up: true, down: false, ups: 0, downs: 0 },
+        { id: uid(), name: "Junk food", diff: "medium", up: true, down: true, ups: 0, downs: 0 },
+        { id: uid(), name: "Doomscrolling", diff: "easy", up: false, down: true, ups: 0, downs: 0 }
+      ],
+      log: []
+    };
+  }
+  function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+  function num(v, fallback) { var n = Number(v); return isFinite(n) ? n : fallback; }
+  function fmt(n) { return String(Math.round(n * 10) / 10); }
+
+  // Accept anything shaped like our state and fill gaps from defaults.
+  function normalize(raw) {
+    var d = defaults();
+    if (!raw || typeof raw !== "object") return d;
+    var s = raw.settings || {}, st = raw.stats || {};
+    var out = {
+      settings: {
+        maxHp: Math.max(1, num(s.maxHp, d.settings.maxHp)),
+        xpPerLevel: Math.max(1, num(s.xpPerLevel, d.settings.xpPerLevel)),
+        xp: {}, dmg: {},
+        refillOnLevel: s.refillOnLevel !== undefined ? !!s.refillOnLevel : true,
+        deathPenalty: s.deathPenalty !== undefined ? !!s.deathPenalty : true
+      },
+      stats: {},
+      habits: Array.isArray(raw.habits) ? raw.habits : d.habits,
+      log: Array.isArray(raw.log) ? raw.log.slice(0, LOG_MAX) : []
+    };
+    DIFFS.forEach(function (k) {
+      out.settings.xp[k] = Math.max(0, num(s.xp && s.xp[k], d.settings.xp[k]));
+      out.settings.dmg[k] = Math.max(0, num(s.dmg && s.dmg[k], d.settings.dmg[k]));
+    });
+    out.stats.level = Math.max(1, Math.floor(num(st.level, 1)));
+    out.stats.hp = Math.min(out.settings.maxHp, Math.max(0, num(st.hp, out.settings.maxHp)));
+    out.stats.xp = Math.max(0, num(st.xp, 0));
+    out.habits = out.habits.filter(function (h) { return h && typeof h.name === "string"; }).map(function (h) {
+      return {
+        id: h.id || uid(), name: h.name.slice(0, 80),
+        diff: DIFFS.indexOf(h.diff) >= 0 ? h.diff : "medium",
+        up: h.up !== false, down: h.down !== false,
+        ups: Math.max(0, num(h.ups, 0)), downs: Math.max(0, num(h.downs, 0))
+      };
+    });
+    return out;
+  }
+
+  var state;
+  try { state = normalize(JSON.parse(localStorage.getItem(KEY))); } catch (e) { state = defaults(); }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  // ---------- Game rules ----------
+  // Carry overflow XP into the next level, as many times as needed.
+  function settleLevels(events) {
+    var S = state.settings, st = state.stats;
+    while (st.xp >= S.xpPerLevel) {
+      st.xp -= S.xpPerLevel;
+      st.level += 1;
+      if (S.refillOnLevel) st.hp = S.maxHp;
+      events.push("level");
+    }
+  }
+  function settleDeath(events) {
+    var S = state.settings, st = state.stats;
+    if (st.hp > 0) return;
+    if (S.deathPenalty) {
+      st.level = Math.max(1, st.level - 1);
+      st.xp = 0;
+    }
+    st.hp = S.maxHp;
+    events.push("death");
+  }
+
+  function act(kind, diff, habitId, srcEl) {
+    var S = state.settings, st = state.stats;
+    var habit = habitId ? findHabit(habitId) : null;
+    var before = { hp: st.hp, xp: st.xp, level: st.level };
+    var amount = kind === "up" ? S.xp[diff] : S.dmg[diff];
+    var events = [];
+    if (kind === "up") {
+      st.xp += amount;
+      settleLevels(events);
+      if (habit) habit.ups += 1;
+    } else {
+      st.hp = Math.max(0, st.hp - amount);
+      settleDeath(events);
+      if (habit) habit.downs += 1;
+    }
+    state.log.unshift({
+      id: uid(), t: Date.now(), kind: kind, diff: diff, amount: amount,
+      habitId: habit ? habit.id : null, name: habit ? habit.name : DIFF_LABEL[diff] + " task",
+      events: events, before: before, levelAfter: st.level
+    });
+    if (state.log.length > LOG_MAX) state.log.length = LOG_MAX;
+    save();
+    renderHud(events, kind);
+    if (habit) renderHabits();
+    renderLog();
+    floatText(srcEl, (kind === "up" ? "+" + fmt(amount) + " XP" : "−" + fmt(amount) + " HP"), kind);
+    try { if (navigator.vibrate) navigator.vibrate(kind === "up" ? 15 : [30, 40, 30]); } catch (e) {}
+
+    if (events.indexOf("death") >= 0) {
+      showToast(S.deathPenalty ? "You fainted. Back to level " + st.level + ", HP refilled." : "You fainted. HP refilled.", "dead");
+    } else if (events.indexOf("level") >= 0) {
+      showToast("Level up! You're level " + st.level, "big");
+    } else {
+      showToast((kind === "up" ? "+" + fmt(amount) + " XP · " : "−" + fmt(amount) + " HP · ") + (habit ? habit.name : DIFF_LABEL[diff]), "");
+    }
+  }
+
+  function undo() {
+    var e = state.log[0];
+    if (!e) return;
+    state.stats.hp = e.before.hp; state.stats.xp = e.before.xp; state.stats.level = e.before.level;
+    var h = e.habitId ? findHabit(e.habitId) : null;
+    if (h) { if (e.kind === "up") h.ups = Math.max(0, h.ups - 1); else h.downs = Math.max(0, h.downs - 1); }
+    state.log.shift();
+    save();
+    renderAll();
+    showToast("Undone", "", true);
+  }
+
+  function findHabit(id) { for (var i = 0; i < state.habits.length; i++) if (state.habits[i].id === id) return state.habits[i]; return null; }
+
+  // ---------- Rendering ----------
+  var $ = function (id) { return document.getElementById(id); };
+
+  function renderHud(events, kind) {
+    var S = state.settings, st = state.stats;
+    var hpPct = Math.max(0, Math.min(100, st.hp / S.maxHp * 100));
+    var xpPct = Math.max(0, Math.min(100, st.xp / S.xpPerLevel * 100));
+    $("hpFill").style.width = hpPct + "%";
+    $("xpFill").style.width = xpPct + "%";
+    $("hpNum").textContent = fmt(st.hp) + " / " + fmt(S.maxHp);
+    $("xpNum").textContent = fmt(st.xp) + " / " + fmt(S.xpPerLevel);
+    $("hpBar").setAttribute("aria-valuenow", st.hp); $("hpBar").setAttribute("aria-valuemax", S.maxHp);
+    $("xpBar").setAttribute("aria-valuenow", st.xp); $("xpBar").setAttribute("aria-valuemax", S.xpPerLevel);
+    $("lvl").textContent = st.level;
+    if (events) {
+      if (events.indexOf("level") >= 0 || events.indexOf("death") >= 0) restart($("badge"), "pop");
+      if (kind === "down") restart($("hud"), "hit");
+    }
+  }
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+  function pips(diff) {
+    var n = DIFFS.indexOf(diff) + 1, s = '<span class="pip" aria-hidden="true">';
+    for (var i = 1; i <= 3; i++) s += '<i class="' + (i <= n ? "on" : "") + '"></i>';
+    return s + "</span>";
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+  function renderPad() {
+    var S = state.settings;
+    $("pad").innerHTML = DIFFS.map(function (d) {
+      return '<div class="pad-row">' +
+        '<div class="label">' + pips(d) + DIFF_LABEL[d] + "</div>" +
+        '<button class="act neg" type="button" data-kind="down" data-diff="' + d + '" aria-label="' + DIFF_LABEL[d] + ' negative, minus ' + fmt(S.dmg[d]) + ' HP"><span class="sym">−</span>' + fmt(S.dmg[d]) + " HP</button>" +
+        '<button class="act pos" type="button" data-kind="up" data-diff="' + d + '" aria-label="' + DIFF_LABEL[d] + ' positive, plus ' + fmt(S.xp[d]) + ' XP"><span class="sym">+</span>' + fmt(S.xp[d]) + " XP</button>" +
+        "</div>";
+    }).join("");
+  }
+
+  function renderHabits() {
+    var S = state.settings;
+    if (!state.habits.length) {
+      $("habits").innerHTML = '<div class="empty">No habits yet. Add one, or use the quick log above.</div>';
+      return;
+    }
+    $("habits").innerHTML = state.habits.map(function (h) {
+      return '<div class="habit">' +
+        '<button class="side neg" type="button" data-kind="down" data-habit="' + h.id + '" ' + (h.down ? "" : "disabled") + ' aria-label="' + esc(h.name) + ' minus">−</button>' +
+        '<button class="body" type="button" data-edit="' + h.id + '" aria-label="Edit ' + esc(h.name) + '">' +
+          '<span class="name">' + esc(h.name) + "</span>" +
+          '<span class="meta"><span class="chip">' + DIFF_LABEL[h.diff] + "</span>" +
+            (h.up ? "<span>+" + fmt(S.xp[h.diff]) + " XP</span>" : "") +
+            (h.down ? "<span>−" + fmt(S.dmg[h.diff]) + " HP</span>" : "") +
+            "<span>" + (h.up ? "▲" + h.ups : "") + (h.up && h.down ? " " : "") + (h.down ? "▼" + h.downs : "") + "</span>" +
+          "</span>" +
+        "</button>" +
+        '<button class="side pos" type="button" data-kind="up" data-habit="' + h.id + '" ' + (h.up ? "" : "disabled") + ' aria-label="' + esc(h.name) + ' plus">+</button>' +
+        "</div>";
+    }).join("");
+  }
+
+  function timeLabel(t) {
+    var d = new Date(t), now = new Date();
+    var hm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return "Today " + hm;
+    return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + hm;
+  }
+  function renderLog() {
+    $("undoBtn").disabled = !state.log.length;
+    if (!state.log.length) {
+      $("log").innerHTML = '<div class="empty">Nothing logged yet. Every + and − you tap shows up here.</div>';
+      return;
+    }
+    $("log").innerHTML = state.log.map(function (e) {
+      var ev = "";
+      if (e.events && e.events.indexOf("level") >= 0) ev = ' · <span class="event">Level ' + e.levelAfter + "!</span>";
+      if (e.events && e.events.indexOf("death") >= 0) ev = ' · <span class="event">Fainted</span>';
+      return '<div class="entry ' + e.kind + '"><span class="stripe"></span>' +
+        '<div class="what">' + esc(e.name) + "<small>" + DIFF_LABEL[e.diff] + " · " + timeLabel(e.t) + ev + "</small></div>" +
+        '<span class="amt">' + (e.kind === "up" ? "+" + fmt(e.amount) + " XP" : "−" + fmt(e.amount) + " HP") + "</span></div>";
+    }).join("");
+  }
+
+  var FIELD_MAP = {
+    "f-hp": function () { return state.stats.hp; },
+    "f-maxHp": function () { return state.settings.maxHp; },
+    "f-xp": function () { return state.stats.xp; },
+    "f-xpPerLevel": function () { return state.settings.xpPerLevel; },
+    "f-level": function () { return state.stats.level; }
+  };
+  function renderRules() {
+    var S = state.settings;
+    Object.keys(FIELD_MAP).forEach(function (id) { if (document.activeElement !== $(id)) $(id).value = fmt(FIELD_MAP[id]()); });
+    DIFFS.forEach(function (d) {
+      if (document.activeElement !== $("f-xp-" + d)) $("f-xp-" + d).value = fmt(S.xp[d]);
+      if (document.activeElement !== $("f-dmg-" + d)) $("f-dmg-" + d).value = fmt(S.dmg[d]);
+    });
+    $("f-refill").checked = S.refillOnLevel;
+    $("f-death").checked = S.deathPenalty;
+    $("f-maxHp").setAttribute("min", "1");
+    $("f-hp").setAttribute("max", S.maxHp);
+  }
+
+  function renderAll() { renderHud(); renderPad(); renderHabits(); renderLog(); renderRules(); }
+
+  // ---------- Effects ----------
+  function floatText(el, text, kind) {
+    if (!el) return;
+    var r = el.getBoundingClientRect();
+    var f = document.createElement("div");
+    f.className = "float " + kind;
+    f.textContent = text;
+    f.style.left = (r.left + r.width / 2) + "px";
+    f.style.top = (r.top - 4) + "px";
+    document.body.appendChild(f);
+    setTimeout(function () { f.remove(); }, 1000);
+  }
+  var toastTimer;
+  function showToast(text, variant, noUndo) {
+    var t = $("toast");
+    $("toastText").textContent = text;
+    t.className = "toast" + (variant ? " " + variant : "");
+    $("toastUndo").hidden = !!noUndo;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, variant ? 3600 : 2400);
+  }
+  function flashSaved(id) { var el = $(id); el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove("show"); }, 1200); }
+
+  // ---------- Events ----------
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-kind]");
+    if (b && !b.disabled) {
+      if (b.dataset.habit) { var h = findHabit(b.dataset.habit); if (h) act(b.dataset.kind, h.diff, h.id, b); }
+      else act(b.dataset.kind, b.dataset.diff, null, b);
+      return;
+    }
+    var e = ev.target.closest("[data-edit]");
+    if (e) openSheet(e.dataset.edit);
+  });
+
+  // Tabs
+  var VIEWS = ["play", "rules", "log"];
+  function showView(name) {
+    if (VIEWS.indexOf(name) < 0) name = "play";
+    VIEWS.forEach(function (v) { $("view-" + v).hidden = v !== name; });
+    document.querySelectorAll(".tab").forEach(function (t) { t.setAttribute("aria-selected", String(t.dataset.view === name)); });
+    if (name === "rules") { renderRules(); $("backup").value = exportText(); }
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll(".tab").forEach(function (t) { t.addEventListener("click", function () { showView(t.dataset.view); }); });
+
+  // Rules form: every field saves on change.
+  function readPos(id, min) {
+    var v = Number($(id).value);
+    if ($(id).value === "" || !isFinite(v) || v < min) return null;
+    return v;
+  }
+  function onCharChange(ev) {
+    var S = state.settings, st = state.stats, id = ev.target.id, v, events = [];
+    if (id === "f-maxHp") { v = readPos(id, 1); if (v !== null) { S.maxHp = v; st.hp = Math.min(st.hp, v); } }
+    if (id === "f-hp") { v = readPos(id, 0); if (v !== null) { st.hp = Math.min(v, S.maxHp); } }
+    if (id === "f-xpPerLevel") { v = readPos(id, 1); if (v !== null) { S.xpPerLevel = v; settleLevels(events); } }
+    if (id === "f-xp") { v = readPos(id, 0); if (v !== null) { st.xp = v; settleLevels(events); } }
+    if (id === "f-level") { v = readPos(id, 1); if (v !== null) st.level = Math.floor(v); }
+    save(); renderHud(events); renderRules(); renderPad(); renderHabits();
+    if (events.length) showToast("Level up! You're level " + st.level, "big", true);
+    flashSaved("saved1");
+  }
+  ["f-hp", "f-maxHp", "f-xp", "f-xpPerLevel", "f-level"].forEach(function (id) { $(id).addEventListener("change", onCharChange); });
+  DIFFS.forEach(function (d) {
+    ["xp", "dmg"].forEach(function (k) {
+      $("f-" + k + "-" + d).addEventListener("change", function () {
+        var v = readPos("f-" + k + "-" + d, 0);
+        if (v !== null) state.settings[k][d] = v;
+        save(); renderRules(); renderPad(); renderHabits(); flashSaved("saved2");
+      });
+    });
+  });
+  $("f-refill").addEventListener("change", function (e) { state.settings.refillOnLevel = e.target.checked; save(); });
+  $("f-death").addEventListener("change", function (e) { state.settings.deathPenalty = e.target.checked; save(); });
+
+  // Backup
+  function exportText() {
+    var copy = JSON.parse(JSON.stringify(state));
+    copy.log = copy.log.slice(0, 50);
+    return JSON.stringify({ app: "life-quest", v: 1, saved: new Date().toISOString(), data: copy });
+  }
+  $("copyBackup").addEventListener("click", function () {
+    var ta = $("backup"); ta.value = exportText();
+    var done = function () { $("backupMsg").textContent = "Copied. Paste it into a note to keep it safe."; };
+    try {
+      navigator.clipboard.writeText(ta.value).then(done, function () { ta.select(); $("backupMsg").textContent = "Text selected. Copy it from your keyboard menu."; });
+    } catch (e) { ta.select(); $("backupMsg").textContent = "Text selected. Copy it from your keyboard menu."; }
+  });
+  $("restoreBackup").addEventListener("click", function () {
+    try {
+      var parsed = JSON.parse($("backup").value);
+      state = normalize(parsed && parsed.data ? parsed.data : parsed);
+      save(); renderAll();
+      $("backupMsg").textContent = "Restored. You're level " + state.stats.level + ".";
+    } catch (e) {
+      $("backupMsg").textContent = "That text isn't a Life Quest backup. Paste the whole thing, starting with {.";
+    }
+  });
+  var resetArmed;
+  $("resetAll").addEventListener("click", function () {
+    var b = $("resetAll");
+    if (!b.classList.contains("armed")) {
+      b.classList.add("armed"); b.textContent = "Tap again to erase all";
+      clearTimeout(resetArmed); resetArmed = setTimeout(function () { b.classList.remove("armed"); b.textContent = "Reset everything"; }, 3500);
+      return;
+    }
+    clearTimeout(resetArmed); b.classList.remove("armed"); b.textContent = "Reset everything";
+    state = defaults(); save(); renderAll(); $("backup").value = exportText();
+    $("backupMsg").textContent = "Reset to level 1 with the starter habits.";
+  });
+
+  $("undoBtn").addEventListener("click", undo);
+  $("toastUndo").addEventListener("click", function () { $("toast").hidden = true; undo(); });
+
+  // Habit sheet
+  var editingId = null, delArmed;
+  $("h-diff").innerHTML = DIFFS.map(function (d) {
+    return '<input type="radio" name="h-diff" id="h-diff-' + d + '" value="' + d + '"><label for="h-diff-' + d + '">' + DIFF_LABEL[d] + '<small id="h-diff-sub-' + d + '"></small></label>';
+  }).join("");
+  function openSheet(id) {
+    var h = id ? findHabit(id) : null;
+    editingId = h ? h.id : null;
+    $("sheetTitle").textContent = h ? "Edit habit" : "New habit";
+    $("h-name").value = h ? h.name : "";
+    var diff = h ? h.diff : "medium";
+    DIFFS.forEach(function (d) {
+      $("h-diff-" + d).checked = d === diff;
+      $("h-diff-sub-" + d).textContent = "+" + fmt(state.settings.xp[d]) + " / −" + fmt(state.settings.dmg[d]);
+    });
+    $("h-up").checked = h ? h.up : true;
+    $("h-down").checked = h ? h.down : true;
+    $("deleteHabit").hidden = !h;
+    $("deleteHabit").classList.remove("armed"); $("deleteHabit").textContent = "Delete";
+    $("scrim").hidden = false;
+    if (!h) setTimeout(function () { $("h-name").focus(); }, 50);
+  }
+  function closeSheet() { $("scrim").hidden = true; editingId = null; }
+  $("addHabit").addEventListener("click", function () { openSheet(null); });
+  $("cancelHabit").addEventListener("click", closeSheet);
+  $("scrim").addEventListener("click", function (e) { if (e.target === $("scrim")) closeSheet(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("scrim").hidden) closeSheet(); });
+  $("habitForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = $("h-name").value.trim();
+    if (!name) { $("h-name").focus(); return; }
+    var diff = (document.querySelector('input[name="h-diff"]:checked') || {}).value || "medium";
+    var up = $("h-up").checked, down = $("h-down").checked;
+    if (!up && !down) up = true;
+    if (editingId) {
+      var h = findHabit(editingId);
+      if (h) { h.name = name; h.diff = diff; h.up = up; h.down = down; }
+    } else {
+      state.habits.push({ id: uid(), name: name, diff: diff, up: up, down: down, ups: 0, downs: 0 });
+    }
+    save(); renderHabits(); closeSheet();
+  });
+  $("deleteHabit").addEventListener("click", function () {
+    var b = $("deleteHabit");
+    if (!b.classList.contains("armed")) {
+      b.classList.add("armed"); b.textContent = "Tap again to delete";
+      clearTimeout(delArmed); delArmed = setTimeout(function () { b.classList.remove("armed"); b.textContent = "Delete"; }, 3000);
+      return;
+    }
+    state.habits = state.habits.filter(function (h) { return h.id !== editingId; });
+    save(); renderHabits(); closeSheet();
+  });
+
+  renderAll();
+  var hash = (location.hash || "").replace("#", "");
+  if (VIEWS.indexOf(hash) >= 0) showView(hash);
+
+  // Offline support when installed to the home screen.
+  if ("serviceWorker" in navigator && location.protocol === "https:" && document.querySelector('link[rel="manifest"]')) {
+    try { navigator.serviceWorker.register("sw.js").catch(function () {}); } catch (e) {}
+  }
+})();
+</script>
+</body>
+</html>
